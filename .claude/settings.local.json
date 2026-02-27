@@ -1,0 +1,6 @@
+{
+  "enabledMcpjsonServers": [
+    "se-course-rag"
+  ],
+  "enableAllProjectMcpServers": true
+}

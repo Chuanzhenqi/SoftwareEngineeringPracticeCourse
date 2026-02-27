@@ -1,0 +1,82 @@
+# ── 文档类型与阶段映射 ─────────────────────────────────────────────────────
+# 按文件名/文档标题匹配（优先长字符串/精确匹配）
+doc_type_rules:
+  - pattern: "软件需求规格说明书|需求规格说明|SRS"
+    doc_type: "需求"
+    phase: "requirement"
+  - pattern: "软件概要设计说明书|概要设计"
+    doc_type: "概要设计"
+    phase: "design"
+  - pattern: "软件详细设计说明书|详细设计"
+    doc_type: "详细设计"
+    phase: "design"
+  - pattern: "软件开发计划书|开发计划"
+    doc_type: "开发计划"
+    phase: "implementation"
+  - pattern: "项目管理文档"
+    doc_type: "项目管理"
+    phase: "implementation"
+  - pattern: "测试报告|测试计划"
+    doc_type: "测试报告"
+    phase: "testing_deployment"
+  - pattern: "用户手册|用户使用说明书|使用说明"
+    doc_type: "用户手册"
+    phase: "testing_deployment"
+  - pattern: "项目总结|总结报告"
+    doc_type: "项目总结"
+    phase: "testing_deployment"
+  - pattern: "人员分工|贡献|权重"
+    doc_type: "人员分工"
+    phase: "implementation"
+
+# ── 章节关键词 → artifact_type 映射 ──────────────────────────────────────
+artifact_rules:
+  - pattern: "目标|概述|背景|简介|范围"
+    artifact_type: "goal"
+  - pattern: "需求|功能|能力|用例|业务规则"
+    artifact_type: "requirement"
+  - pattern: "接口|API|通信|协议|外部接口"
+    artifact_type: "interface"
+  - pattern: "数据库|数据结构|数据模型|实体|ER"
+    artifact_type: "data_model"
+  - pattern: "模块|组件|架构|分层|子系统"
+    artifact_type: "module"
+  - pattern: "设计决策|方案|选型|技术选择"
+    artifact_type: "design_decision"
+  - pattern: "实现|开发|编码|迭代|Day"
+    artifact_type: "implementation"
+  - pattern: "测试用例|测试|验证|断言|用例"
+    artifact_type: "test_case"
+  - pattern: "缺陷|Bug|问题|故障"
+    artifact_type: "defect"
+  - pattern: "部署|上线|发布|环境|配置"
+    artifact_type: "deployment"
+  - pattern: "风险|约束|限制|假设"
+    artifact_type: "risk"
+  - pattern: "总结|复盘|回顾|结论"
+    artifact_type: "summary"
+
+# ── 章节内容特征 → evidence_type 映射 ────────────────────────────────────
+evidence_rules:
+  - pattern: "\\|.*\\|"             # 含 Markdown 表格
+    evidence_type: "table"
+  - pattern: "\\d+ms|\\d+%|TPS|QPS|吞吐|响应时间|并发"
+    evidence_type: "metric"
+  - pattern: "```|`[A-Za-z]"       # 代码块
+    evidence_type: "code_ref"
+  - pattern: "日志|log|ERROR|WARN|INFO"
+    evidence_type: "log"
+  - pattern: "截图|图\\d|Figure"
+    evidence_type: "screenshot"
+
+# ── 状态关键词 ────────────────────────────────────────────────────────────
+status_rules:
+  done:     ["已完成", "完成", "done", "closed", "resolved"]
+  in_progress: ["进行中", "开发中", "in progress", "ongoing"]
+  planned:  ["计划", "待开发", "TODO", "planned"]
+  blocked:  ["阻塞", "blocked", "问题", "无法解决"]
+
+# ── 学期路径关键词 ─────────────────────────────────────────────────────────
+term_rules:
+  春季: ["春季", "spring", "秋", "第一学期"]
+  夏季: ["夏季", "summer", "第二学期", "暑"]

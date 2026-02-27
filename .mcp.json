@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "se-course-rag": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["rag_backend/mcp_server.py"],
+      "env": {
+        "PYTHONPATH": "rag_backend"
+      },
+      "description": "软件工程课程历史文档 RAG 检索，供生成各阶段文档时参考往年案例"
+    }
+  }
+}
