@@ -11,7 +11,7 @@ rag_backend/
 ├── requirements.txt
 ├── pipeline/
 │   ├── parser.py            # PDF → 结构化 Markdown
-│   ├── chunker.py           # 两层分块（结构 + 语义）
+│   ├── chunker.py           # 两层分块（结构/小结边界 + 语义）
 │   ├── metadata.py          # metadata 自动生成（规则 + 启发式）
 │   └── ingest.py            # 全量入库流水线
 ├── vectordb/
@@ -114,3 +114,48 @@ Content-Type: application/json
 | `QDRANT_COLLECTION` | se_course_docs | Collection 名 |
 | `EMBED_MODEL` | BAAI/bge-m3 | Embedding 模型 |
 | `EMBED_BATCH_SIZE` | 16 | 批量 embedding 大小 |
+| `EMBED_PROVIDER` | local_bge | `local_bge` / `openai_compatible` |
+| `OPENAI_BASE_URL` | 空 | OpenAI 兼容接口地址（如 `https://api.apiyi.com/v1`） |
+| `OPENAI_API_KEY` | 空 | OpenAI 兼容接口密钥（也兼容 `APIYI_API_KEY` / `API_KEY`） |
+| `OPENAI_EMBED_MODEL` | text-embedding-3-small | embedding 模型名 |
+| `OPENAI_EMBED_DIMENSIONS` | 空 | 可选：部分模型支持自定义向量维度 |
+| `OPENAI_EMBED_DIM` | 1536 | provider 为 openai 时默认向量维度 |
+
+## 使用 OpenAI 兼容 Embedding（apiyi 示例）
+
+在 `rag_backend/.env` 中设置：
+
+```env
+EMBED_PROVIDER=openai_compatible
+OPENAI_BASE_URL=https://api.apiyi.com/v1
+OPENAI_API_KEY=YOUR_API_KEY
+OPENAI_EMBED_MODEL=text-embedding-3-small
+# 可选：OPENAI_EMBED_DIMENSIONS=1536
+```
+
+### 先用 curl 验证接口可用
+
+```bash
+curl https://api.apiyi.com/v1/embeddings \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_API_KEY" \
+  -d '{
+    "input": "人工智能正在改变世界",
+    "model": "text-embedding-3-small"
+  }'
+```
+
+### 用 OpenAI SDK 做最小验证
+
+```python
+from openai import OpenAI
+
+client = OpenAI(api_key="YOUR_API_KEY", base_url="https://api.apiyi.com/v1")
+resp = client.embeddings.create(
+    input=["人工智能正在改变世界", "深度学习推动了AI的发展"],
+    model="text-embedding-3-small",
+)
+print(len(resp.data), len(resp.data[0].embedding))
+```
+
+项目内 `vectordb/embedder.py` 已按同样方式接入，`pipeline/ingest.py` 会自动批量调用 embedding 接口。配置完成后直接走上传或批量入库即可。

@@ -15,7 +15,24 @@ from vectordb.retriever import search
 router = APIRouter(prefix="/api", tags=["search"])
 
 
-# ── 请求体 ────────────────────────────────────────────────────────────────
+def _norm_optional_str(value: Optional[str]) -> Optional[str]:
+    if value is None:
+        return None
+    v = value.strip()
+    if not v:
+        return None
+    if v.lower() in {"string", "none", "null"}:
+        return None
+    return v
+
+
+def _norm_quality_level(value: Optional[list[str]]) -> Optional[list[str]]:
+    if not value:
+        return None
+    cleaned = [x.strip() for x in value if isinstance(x, str) and x.strip() and x.strip().lower() not in {"string", "none", "null"}]
+    return cleaned or None
+
+
 class SearchRequest(BaseModel):
     query: str = Field(..., description="自然语言检索语句")
     term: Optional[str] = Field(None, description="春季 / 夏季")
@@ -49,14 +66,21 @@ async def search_documents(req: SearchRequest):
 
     每条结果附 `why_hit`，说明命中原因（语义相似度 / 标签匹配率 / 连续性）。
     """
+    term = _norm_optional_str(req.term)
+    phase = _norm_optional_str(req.phase)
+    doc_type = _norm_optional_str(req.doc_type)
+    project_id = _norm_optional_str(req.project_id)
+    artifact_type = _norm_optional_str(req.artifact_type)
+    quality_level = _norm_quality_level(req.quality_level)
+
     results = search(
         query=req.query,
-        term=req.term,
-        phase=req.phase,
-        doc_type=req.doc_type,
-        project_id=req.project_id,
-        quality_level=req.quality_level,
-        artifact_type=req.artifact_type,
+        term=term,
+        phase=phase,
+        doc_type=doc_type,
+        project_id=project_id,
+        quality_level=quality_level,
+        artifact_type=artifact_type,
         use_reranker=req.use_reranker,
     )
     return results
@@ -69,4 +93,8 @@ async def search_simple(
     term: Optional[str] = Query(None),
 ):
     """GET 简化接口，快速调试用"""
-    return search(query=q, phase=phase, term=term)
+    return search(
+        query=q,
+        phase=_norm_optional_str(phase),
+        term=_norm_optional_str(term),
+    )

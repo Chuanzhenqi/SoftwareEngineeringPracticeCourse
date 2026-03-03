@@ -1,10 +1,12 @@
 """
 pipeline/chunker.py
 两层分块策略（见 rag方案.md §3）：
-  第一层：按 Markdown heading 结构边界切块
-  第二层：在结构块内做滑动窗口语义切分（按字符数）
+    第一层：按 Markdown heading + 小结边界切块
+    第二层：在结构块内做滑动窗口语义切分（按字符数）
 
-每块携带 section_path（标题栈）供 metadata 生成使用。
+说明：
+    - 当同一文档包含多个“模块小结/本章小结”时，优先按小结切开，避免跨模块语义串扰。
+    - 每块携带 section_path（标题栈）供 metadata 生成使用。
 """
 
 from __future__ import annotations
@@ -25,12 +27,45 @@ class TextChunk:
 
 # ── 标题识别 ─────────────────────────────────────────────────────────────
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$")
+_SUMMARY_TITLE_RE = re.compile(
+    r"^(?:第?[一二三四五六七八九十百千\d]+[章节部分篇]?\s*)?"
+    r"(?:本章|本节|模块|阶段|单元)?"
+    r"(?:小结|总结|结论|回顾|总结与展望)"
+    r"(?:[：:]?.*)?$"
+)
 
 
 def _parse_heading(line: str) -> tuple[int, str] | None:
     """返回 (level, title_text) 或 None"""
     m = _HEADING_RE.match(line.strip())
     return (len(m.group(1)), m.group(2).strip()) if m else None
+
+
+def _normalize_title(text: str) -> str:
+    return re.sub(r"[：:。；;\-—\s]+$", "", text.strip())
+
+
+def _looks_like_summary_boundary(line: str) -> str | None:
+    """
+    判断一行是否可作为“小结边界”，返回标准化标题；否则返回 None。
+
+    规则：
+    - Markdown heading（### 模块小结）优先按标题文本判断
+    - 普通行（OCR/PDF 抽取常见）在长度较短且命中“小结/总结”模式时识别为边界
+    """
+    heading = _parse_heading(line)
+    title = heading[1] if heading else line.strip()
+    title = _normalize_title(title)
+    if not title:
+        return None
+
+    if _SUMMARY_TITLE_RE.match(title):
+        return title
+
+    if len(title) <= 32 and ("小结" in title or title.endswith(("总结", "结论"))):
+        if re.fullmatch(r"[\w\u4e00-\u9fa5\s、，,。.；;:：()（）《》【】\-]+", title):
+            return title
+    return None
 
 
 # ── 第一层：按 heading 边界切块 ──────────────────────────────────────────
@@ -109,6 +144,39 @@ def _semantic_split(text: str, section_path: str, page_start: int, start_idx: in
     return chunks
 
 
+def _split_by_summary_boundaries(text: str) -> list[tuple[str, str]]:
+    """
+    在结构块内部继续按“小结边界”拆分。
+
+    返回 [(sub_text, boundary_title), ...]，boundary_title 为空串表示未命中边界。
+    """
+    lines = text.splitlines()
+    if not lines:
+        return []
+
+    sections: list[tuple[str, str]] = []
+    current_lines: list[str] = []
+    current_boundary = ""
+
+    def push_section() -> None:
+        if any(line.strip() for line in current_lines):
+            sections.append(("\n".join(current_lines).strip(), current_boundary))
+
+    for line in lines:
+        boundary_title = _looks_like_summary_boundary(line)
+        if boundary_title and any(x.strip() for x in current_lines):
+            push_section()
+            current_lines = [line]
+            current_boundary = boundary_title
+            continue
+        if boundary_title and not current_lines:
+            current_boundary = boundary_title
+        current_lines.append(line)
+
+    push_section()
+    return sections
+
+
 # ── 特殊块检测（表格/接口/编号列表单独成块，不拆分）────────────────────
 _SPECIAL_PATTERNS = [
     re.compile(r"(\|.+\|.+\n){2,}"),          # Markdown 表格
@@ -134,18 +202,27 @@ def chunk_document(doc: ParsedDocument) -> list[TextChunk]:
         if not sec_text.strip():
             continue
 
-        # 特殊内容整块保留，不二次切分
-        if _is_special(sec_text) or len(sec_text) <= CHUNK_MAX_CHARS:
-            all_chunks.append(TextChunk(
-                text=sec_text.strip(),
-                section_path=section_path,
-                page_start=0,
-                chunk_index=idx,
-            ))
-            idx += 1
-        else:
-            sub = _semantic_split(sec_text, section_path, 0, idx)
-            all_chunks.extend(sub)
-            idx += len(sub)
+        sub_sections = _split_by_summary_boundaries(sec_text)
+        if not sub_sections:
+            sub_sections = [(sec_text, "")]
+
+        for sub_text, boundary_title in sub_sections:
+            scoped_path = section_path
+            if boundary_title:
+                scoped_path = f"{section_path} > {boundary_title}" if section_path else boundary_title
+
+            # 特殊内容整块保留，不二次切分
+            if _is_special(sub_text) or len(sub_text) <= CHUNK_MAX_CHARS:
+                all_chunks.append(TextChunk(
+                    text=sub_text.strip(),
+                    section_path=scoped_path,
+                    page_start=0,
+                    chunk_index=idx,
+                ))
+                idx += 1
+            else:
+                sub = _semantic_split(sub_text, scoped_path, 0, idx)
+                all_chunks.extend(sub)
+                idx += len(sub)
 
     return all_chunks

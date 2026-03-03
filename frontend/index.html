@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SE 课程文档入库</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { --brand: #4f46e5; }
+    body  { font-family: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif; }
+
+    /* 拖拽区域 */
+    #drop-zone {
+      border: 2px dashed #c7d2fe;
+      transition: border-color .2s, background .2s;
+    }
+    #drop-zone.drag-over {
+      border-color: var(--brand);
+      background: #eef2ff;
+    }
+    #drop-zone.has-file {
+      border-color: #22c55e;
+      background: #f0fdf4;
+    }
+
+    /* 进度条 */
+    #progress-bar {
+      transition: width .3s ease;
+    }
+  </style>
+</head>
+<body class="min-h-screen bg-slate-50">
+
+<!-- ── 顶部 Nav ─────────────────────────────────────────────────────────── -->
+<header class="bg-indigo-600 shadow-sm">
+  <div class="max-w-5xl mx-auto px-6 py-4 flex items-center gap-3">
+    <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" stroke-width="1.8"
+         viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round"
+            d="M3 7.5L7.5 3m0 0L12 7.5M7.5 3v13.5m13.5 0L16.5 21m0 0L12 16.5M16.5 21V7.5"/>
+    </svg>
+    <span class="text-white text-xl font-semibold tracking-wide">SE 课程文档向量入库</span>
+  </div>
+</header>
+
+<!-- ── 主体 ─────────────────────────────────────────────────────────────── -->
+<main class="max-w-5xl mx-auto px-6 py-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+
+  <!-- ── 左侧：上传面板 ───────────────────────────────────────────────── -->
+  <section class="lg:col-span-2">
+    <div class="bg-white rounded-2xl shadow-sm p-6 space-y-6">
+      <h2 class="text-lg font-semibold text-slate-800">上传文档</h2>
+
+      <!-- 拖拽 / 点击区域 -->
+      <div id="drop-zone"
+           class="rounded-xl p-10 flex flex-col items-center justify-center gap-3 cursor-pointer select-none"
+           onclick="document.getElementById('file-input').click()">
+        <svg id="drop-icon" class="w-12 h-12 text-indigo-300" fill="none" stroke="currentColor"
+             stroke-width="1.4" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"/>
+        </svg>
+        <p class="text-slate-500 text-sm text-center leading-relaxed">
+          <span class="font-medium text-indigo-600">点击选择</span> 或拖拽文件至此处<br/>
+          支持 PDF / DOCX / Markdown，可批量选择
+        </p>
+        <p id="file-names" class="text-green-600 text-sm font-medium hidden"></p>
+      </div>
+      <input id="file-input" type="file" accept=".pdf,.docx,.md,.markdown" multiple class="hidden" />
+
+      <!-- 元数据表单 -->
+      <div class="grid grid-cols-2 gap-4">
+        <div class="col-span-2 sm:col-span-1">
+          <label class="block text-sm font-medium text-slate-600 mb-1">项目 ID
+            <span class="text-slate-400 font-normal">（可选，留空自动推断）</span></label>
+          <input id="project-id" type="text" placeholder="如：team-alpha"
+                 class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
+                        focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1">学期</label>
+          <select id="term"
+                  class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-indigo-400">
+            <option value="">自动推断</option>
+            <option value="春季">春季</option>
+            <option value="夏季">夏季</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-600 mb-1">年份</label>
+          <input id="year" type="number" placeholder="如：2024" min="2010" max="2099"
+                 class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm
+                        focus:outline-none focus:ring-2 focus:ring-indigo-400" />
+        </div>
+      </div>
+
+      <!-- 进度条（隐藏） -->
+      <div id="progress-wrap" class="hidden space-y-1">
+        <div class="flex justify-between text-xs text-slate-500">
+          <span id="progress-label">准备中…</span>
+          <span id="progress-pct">0%</span>
+        </div>
+        <div class="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+          <div id="progress-bar" class="h-2 bg-indigo-500 rounded-full" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- 提交按钮 -->
+      <button id="submit-btn" onclick="handleUpload()"
+              class="w-full bg-indigo-600 hover:bg-indigo-700 active:scale-95
+                     text-white font-medium py-3 rounded-xl transition-all duration-150
+                     disabled:opacity-40 disabled:cursor-not-allowed">
+        开始入库
+      </button>
+    </div>
+
+    <!-- 结果区域 -->
+    <div id="results" class="space-y-3 mt-6"></div>
+  </section>
+
+  <!-- ── 右侧：MinIO 文件列表 ─────────────────────────────────────────── -->
+  <aside class="lg:col-span-1">
+    <div class="bg-white rounded-2xl shadow-sm p-6 space-y-4">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-slate-800">已备份文件</h2>
+        <button onclick="loadFiles()"
+                class="text-sm text-indigo-600 hover:text-indigo-800 flex items-center gap-1">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round"
+                  d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+          </svg>
+          刷新
+        </button>
+      </div>
+      <p class="text-xs text-slate-400">存储于 MinIO（rag-docs bucket）</p>
+      <ul id="file-list" class="space-y-2 max-h-96 overflow-y-auto text-sm divide-y divide-slate-50">
+        <li class="text-slate-400 text-xs py-2">加载中…</li>
+      </ul>
+    </div>
+  </aside>
+
+</main>
+
+<!-- ── JS ────────────────────────────────────────────────────────────────── -->
+<script>
+  // 可以通过 ?api=http://... 参数覆盖 API 地址
+  // 直接打开本地文件时默认连接 localhost:8000
+  const params = new URLSearchParams(location.search);
+  const API_BASE = (params.get("api") || "http://localhost:8000").replace(/\/$/, "");
+
+  /* ─ 拖拽逻辑 ─────────────────────────────────────────────── */
+  const dropZone  = document.getElementById("drop-zone");
+  const fileInput = document.getElementById("file-input");
+
+  ["dragenter","dragover"].forEach(evt =>
+    dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add("drag-over"); }));
+  ["dragleave","dragend","drop"].forEach(evt =>
+    dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.remove("drag-over"); }));
+  dropZone.addEventListener("drop", e => {
+    e.preventDefault();
+    fileInput.files = e.dataTransfer.files;
+    onFilesChosen();
+  });
+  fileInput.addEventListener("change", onFilesChosen);
+
+  function onFilesChosen() {
+    const files = fileInput.files;
+    if (!files.length) return;
+    dropZone.classList.add("has-file");
+    const names = [...files].map(f => f.name).join("、");
+    const el = document.getElementById("file-names");
+    el.textContent = `已选择：${names}`;
+    el.classList.remove("hidden");
+  }
+
+  /* ─ 上传逻辑 ────────────────────────────────────────────── */
+  async function handleUpload() {
+    const files = fileInput.files;
+    if (!files.length) { alert("请先选择文件"); return; }
+
+    const btn  = document.getElementById("submit-btn");
+    const wrap = document.getElementById("progress-wrap");
+    const bar  = document.getElementById("progress-bar");
+    const lbl  = document.getElementById("progress-label");
+    const pct  = document.getElementById("progress-pct");
+
+    btn.disabled = true;
+    wrap.classList.remove("hidden");
+    document.getElementById("results").innerHTML = "";
+
+    const fileList = [...files];
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+      const progressBase = Math.round((i / fileList.length) * 100);
+      const progressEnd  = Math.round(((i + 1) / fileList.length) * 100);
+
+      lbl.textContent = `正在入库 (${i+1}/${fileList.length})：${file.name}`;
+      setProgress(bar, pct, progressBase);
+
+      const fd = new FormData();
+      fd.append("file", file);
+      const pid  = document.getElementById("project-id").value.trim();
+      const term = document.getElementById("term").value;
+      const year = document.getElementById("year").value.trim();
+      if (pid)  fd.append("project_id", pid);
+      if (term) fd.append("term", term);
+      if (year) fd.append("year", year);
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/upload`, { method: "POST", body: fd });
+        const data = await resp.json();
+        setProgress(bar, pct, progressEnd);
+        appendResult(file.name, resp.ok, data);
+      } catch (err) {
+        setProgress(bar, pct, progressEnd);
+        appendResult(file.name, false, { detail: String(err) });
+      }
+    }
+
+    lbl.textContent = "全部完成";
+    btn.disabled = false;
+    loadFiles();
+  }
+
+  function setProgress(bar, pct, val) {
+    bar.style.width = val + "%";
+    pct.textContent = val + "%";
+  }
+
+  function appendResult(filename, ok, data) {
+    const container = document.getElementById("results");
+    const div = document.createElement("div");
+    div.className = `rounded-xl p-4 shadow-sm text-sm space-y-2 ${ok ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`;
+
+    const report = data.report || {};
+    div.innerHTML = `
+      <div class="flex items-start gap-2">
+        <span class="${ok ? "text-green-600" : "text-red-500"} mt-0.5">
+          ${ok ? "✅" : "❌"}
+        </span>
+        <div class="flex-1 min-w-0">
+          <p class="font-medium text-slate-800 truncate">${escHtml(filename)}</p>
+          ${ok ? `
+            <div class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
+              <span>入库 Chunks</span>
+              <span class="font-semibold text-indigo-600">${report.chunks_ingested ?? "—"}</span>
+              <span>需人工复核</span>
+              <span class="font-semibold ${(report.needs_review_count ?? 0) > 0 ? "text-amber-500" : "text-green-500"}">
+                ${report.needs_review_count ?? 0}
+              </span>
+              <span>MinIO 备份</span>
+              <span class="${report.minio_object ? "text-green-600" : "text-slate-400"}">
+                ${report.minio_object ? "✓ " + escHtml(report.minio_object) : "未连接"}
+              </span>
+            </div>
+          ` : `<p class="text-red-600 mt-1">${escHtml(data.detail || JSON.stringify(data))}</p>`}
+        </div>
+      </div>
+    `;
+    container.appendChild(div);
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+
+  /* ─ 文件列表 ─────────────────────────────────────────────── */
+  async function loadFiles() {
+    const ul = document.getElementById("file-list");
+    ul.innerHTML = `<li class="text-slate-400 text-xs py-2">加载中…</li>`;
+    try {
+      const resp = await fetch(`${API_BASE}/api/files`);
+      const data = await resp.json();
+      if (!data.files || data.files.length === 0) {
+        ul.innerHTML = `<li class="text-slate-400 text-xs py-2">暂无已备份文件</li>`;
+        return;
+      }
+      ul.innerHTML = data.files.map(f => `
+        <li class="py-2">
+          <p class="font-medium text-slate-700 truncate" title="${escHtml(f.name)}">${escHtml(f.name)}</p>
+          <p class="text-xs text-slate-400 mt-0.5">
+            ${formatBytes(f.size)} · ${f.last_modified ? new Date(f.last_modified).toLocaleString("zh-CN") : ""}
+          </p>
+        </li>
+      `).join("");
+    } catch {
+      ul.innerHTML = `<li class="text-amber-500 text-xs py-2">文件列表获取失败（MinIO 可能未启动）</li>`;
+    }
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes) return "0 B";
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1048576) return (bytes/1024).toFixed(1) + " KB";
+    return (bytes/1048576).toFixed(1) + " MB";
+  }
+
+  // 页面加载时自动拉取文件列表
+  window.addEventListener("DOMContentLoaded", loadFiles);
+</script>
+</body>
+</html>

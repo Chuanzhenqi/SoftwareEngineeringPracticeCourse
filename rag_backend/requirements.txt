@@ -1,34 +1,19 @@
-# PDF 解析
 pdfplumber>=0.11.0
-pymupdf>=1.24.0          # fitz，用作 fallback 及图注提取
-
-# 文档处理
+pymupdf>=1.24.0
 markdownify>=0.13.1
-python-docx>=1.1.0       # docx 可选支持
+python-docx>=1.1.0
 pyyaml>=6.0
-
-# Embedding
-FlagEmbedding>=1.2.11    # bge-m3 dense + sparse + colbert
+FlagEmbedding>=1.2.11
 torch>=2.1.0
-
-# 向量数据库
+transformers>=4.40.0,<4.46.0
 qdrant-client>=1.9.0
-
-# 混合检索稀疏端
 rank_bm25>=0.2.2
-
-# 重排 reranker
-# FlagEmbedding 已包含 FlagReranker，无需额外安装
-
-# API 框架
 fastapi>=0.111.0
 uvicorn[standard]>=0.29.0
-python-multipart>=0.0.9   # 文件上传
-
-# MCP Server
+python-multipart>=0.0.9
 mcp[cli]>=1.0.0
-
-# 工具
+minio>=7.2.0
 tqdm>=4.66.0
 loguru>=0.7.2
 python-dotenv>=1.0.0
+openai>=1.51.0

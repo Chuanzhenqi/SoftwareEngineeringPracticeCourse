@@ -26,6 +26,7 @@ from config import (
     QDRANT_COLLECTION,
     TOPK_RECALL, TOPK_RERANK, CONTINUITY_EXPAND,
     SCORE_W_SIM, SCORE_W_META, SCORE_W_CONTINUITY,
+    RERANK_ENABLED, RERANK_MODEL,
 )
 from vectordb.client import get_qdrant_client
 from vectordb.embedder import embed_query
@@ -38,8 +39,8 @@ def _get_reranker():
     global _reranker
     if _reranker is None:
         from FlagEmbedding import FlagReranker
-        logger.info("加载 Reranker 模型：BAAI/bge-reranker-v2-m3")
-        _reranker = FlagReranker("BAAI/bge-reranker-v2-m3", use_fp16=True)
+        logger.info(f"加载 Reranker 模型：{RERANK_MODEL}")
+        _reranker = FlagReranker(RERANK_MODEL, use_fp16=True)
     return _reranker
 
 
@@ -106,7 +107,8 @@ def _hybrid_search(
             query=FusionQuery(fusion=Fusion.RRF),
             limit=limit,
         ).points
-    except Exception:
+    except Exception as exc:
+        logger.warning(f"Qdrant 混合检索失败，回退 dense-only：{type(exc).__name__}: {exc}")
         # fallback: 仅 dense
         results = client.search(
             collection_name=QDRANT_COLLECTION,
@@ -194,8 +196,11 @@ def _continuity_expand(
                     if hid not in existing_ids:
                         extra.append({"id": hid, "score": 0.0, "payload": h.payload})
                         existing_ids.add(hid)
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    f"连续性扩展查询失败，跳过该 link（to={linked_id_pat}）："
+                    f"{type(exc).__name__}: {exc}"
+                )
         if len(extra) >= expand_n:
             break
 
@@ -217,6 +222,10 @@ def search(
     返回 TopK_rerank 条结果，每条含：
       text / metadata / composite_score / why_hit
     """
+    logger.info(
+        f"开始检索：query={query[:60]!r}, phase={phase}, term={term}, "
+        f"doc_type={doc_type}, use_reranker={use_reranker}"
+    )
     client = get_qdrant_client()
 
     # 1. Embedding
@@ -241,16 +250,21 @@ def search(
         return []
 
     # 4. Rerank（cross-encoder）
-    if use_reranker and len(candidates) > TOPK_RERANK:
-        reranker = _get_reranker()
-        pairs = [(query, c["payload"].get("text", "")) for c in candidates]
-        rr_scores = reranker.compute_score(pairs, normalize=True)
-        for c, rs in zip(candidates, rr_scores):
-            c["rerank_score"] = float(rs)
-        candidates.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
-        candidates = candidates[:TOPK_RERANK]
-    else:
-        candidates = candidates[:TOPK_RERANK]
+    if use_reranker and not RERANK_ENABLED:
+        logger.info("已跳过 reranker：RERANK_ENABLED=false（当前仅使用向量召回结果）")
+
+    if use_reranker and RERANK_ENABLED and len(candidates) > TOPK_RERANK:
+        try:
+            reranker = _get_reranker()
+            pairs = [(query, c["payload"].get("text", "")) for c in candidates]
+            rr_scores = reranker.compute_score(pairs, normalize=True)
+            for c, rs in zip(candidates, rr_scores):
+                c["rerank_score"] = float(rs)
+            candidates.sort(key=lambda x: x.get("rerank_score", 0), reverse=True)
+        except Exception as exc:
+            logger.warning(f"Reranker 不可用，自动降级为仅向量召回：{type(exc).__name__}: {exc}")
+
+    candidates = candidates[:TOPK_RERANK]
 
     # 5. 连续性扩展
     extra = _continuity_expand(client, candidates, CONTINUITY_EXPAND)
@@ -274,5 +288,6 @@ def search(
         phase_order.get(x["metadata"].get("phase", ""), 9),
         -x["composite_score"],
     ))
+    logger.info(f"检索完成：返回 {len(output)} 条")
 
     return output
