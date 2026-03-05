@@ -41,7 +41,7 @@ def create_collection(client: QdrantClient, collection_name: str = QDRANT_COLLEC
 
     # 为高频过滤字段建 payload 索引
     for field in ["phase", "doc_type", "term", "project_id", "quality_level",
-                  "year", "course", "artifact_type"]:
+                  "year", "course", "artifact_type", "source_file", "document_id", "chunk_uuid"]:
         client.create_payload_index(
             collection_name=collection_name,
             field_name=field,
@@ -78,8 +78,10 @@ def build_point(text: str, vector: dict, meta: dict) -> dict:
 
     payload = {**meta, "text": text}
 
+    point_id = str(meta.get("chunk_uuid") or uuid.uuid4())
+
     return PointStruct(
-        id=str(uuid.uuid4()),
+        id=point_id,
         vector={"dense": vector["dense"], "sparse": sparse_vec},
         payload=payload,
     )

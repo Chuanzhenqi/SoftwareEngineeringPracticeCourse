@@ -13,6 +13,7 @@ pipeline/ingest.py
 
 from __future__ import annotations
 import time
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -31,6 +32,8 @@ def ingest_file(
     project_id: Optional[str] = None,
     term: Optional[str] = None,
     year: Optional[int] = None,
+    document_id: Optional[str] = None,
+    source_file: Optional[str] = None,
     batch_size: int = 32,
 ) -> dict:
     """
@@ -40,9 +43,10 @@ def ingest_file(
     """
     start_ts = time.perf_counter()
     file_path = Path(file_path)
+    document_id = document_id or str(uuid.uuid4())
     logger.info(f"开始入库：{file_path.name}")
 
-    # ── 1. 解析 ──────────────────────────────────────────────────────────
+    # ── 1. 解析 
     try:
         doc = parse_document(file_path)
     except Exception as exc:
@@ -58,7 +62,7 @@ def ingest_file(
             first_heading = line.lstrip("#").strip()
             break
 
-    # ── 2. 分块 ──────────────────────────────────────────────────────────
+    # ── 2. 分块 
     try:
         chunks = chunk_document(doc)
     except Exception as exc:
@@ -66,7 +70,7 @@ def ingest_file(
         raise RuntimeError(f"文档分块失败：{type(exc).__name__}: {exc}") from exc
     logger.info(f"分块完成：{len(chunks)} 块")
 
-    # ── 3. Metadata 生成 ─────────────────────────────────────────────────
+    # ── 3. Metadata 生成 
     points_data = []
     needs_review_list = []
 
@@ -87,12 +91,16 @@ def ingest_file(
             meta["term"] = term
         if year:
             meta["year"] = year
+        meta["document_id"] = document_id
+        meta["chunk_uuid"] = str(uuid.uuid4())
+        if source_file:
+            meta["source_file"] = source_file
 
         points_data.append((chunk.text, meta))
         if needs_review:
             needs_review_list.append({"chunk_id": meta["chunk_id"], "reason": "low_confidence"})
 
-    # ── 4 & 5. Embedding + 写入 Qdrant ────────────────────────────────
+    # ── 4 & 5. Embedding + 写入 Qdrant 
     from vectordb.embedder import embed_texts  # lazy import（避免启动时加载模型）
 
     client = get_qdrant_client()
@@ -121,9 +129,10 @@ def ingest_file(
             raise RuntimeError(f"Qdrant 写入失败：{type(exc).__name__}: {exc}") from exc
         inserted += len(pts)
 
-    # ── 6. 校验报告 ──────────────────────────────────────────────────────
+    # ── 6. 校验报告
     report = {
         "status": "ok",
+        "document_id": document_id,
         "file": str(file_path),
         "pages": len(doc.pages),
         "chunks_total": len(chunks),
