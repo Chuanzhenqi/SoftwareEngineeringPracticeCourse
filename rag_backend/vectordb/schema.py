@@ -23,12 +23,18 @@ from config import QDRANT_COLLECTION, VECTOR_DIM
 
 def create_collection(client: QdrantClient, collection_name: str = QDRANT_COLLECTION) -> None:
     """
-    建表：
-    - vectors        : dense (1024 维 Cosine)
+    建表（幂等）：
+    - vectors        : dense (VECTOR_DIM 维 Cosine)
     - sparse_vectors : BGE-M3 sparse（为混合检索）
     - payload 索引   : phase / doc_type / term / project_id / quality_level
+
+    若 collection 已存在则先删除再重建（仅在 ensure_collection 检测到维度不一致时调用）。
     """
-    client.recreate_collection(
+    existing = [c.name for c in client.get_collections().collections]
+    if collection_name in existing:
+        client.delete_collection(collection_name)
+
+    client.create_collection(
         collection_name=collection_name,
         vectors_config={
             "dense": VectorParams(size=VECTOR_DIM, distance=Distance.COSINE),
