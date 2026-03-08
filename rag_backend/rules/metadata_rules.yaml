@@ -1,4 +1,4 @@
-# ── 文档类型与阶段映射 ─────────────────────────────────────────────────────
+# 文档类型与阶段映射
 # 按文件名/文档标题匹配（优先长字符串/精确匹配）
 doc_type_rules:
   - pattern: "软件需求规格说明书|需求规格说明|SRS"
@@ -29,7 +29,7 @@ doc_type_rules:
     doc_type: "人员分工"
     phase: "implementation"
 
-# ── 章节关键词 → artifact_type 映射 ──────────────────────────────────────
+# 章节关键词 → artifact_type 映射
 artifact_rules:
   - pattern: "目标|概述|背景|简介|范围"
     artifact_type: "goal"
@@ -56,7 +56,7 @@ artifact_rules:
   - pattern: "总结|复盘|回顾|结论"
     artifact_type: "summary"
 
-# ── 章节内容特征 → evidence_type 映射 ────────────────────────────────────
+# 章节内容特征 → evidence_type 映射
 evidence_rules:
   - pattern: "\\|.*\\|"             # 含 Markdown 表格
     evidence_type: "table"
@@ -69,14 +69,14 @@ evidence_rules:
   - pattern: "截图|图\\d|Figure"
     evidence_type: "screenshot"
 
-# ── 状态关键词 ────────────────────────────────────────────────────────────
+# 状态关键词 
 status_rules:
   done:     ["已完成", "完成", "done", "closed", "resolved"]
   in_progress: ["进行中", "开发中", "in progress", "ongoing"]
   planned:  ["计划", "待开发", "TODO", "planned"]
   blocked:  ["阻塞", "blocked", "问题", "无法解决"]
 
-# ── 学期路径关键词 ─────────────────────────────────────────────────────────
+# 学期路径关键词
 term_rules:
   春季: ["春季", "spring", "秋", "第一学期"]
   夏季: ["夏季", "summer", "第二学期", "暑"]

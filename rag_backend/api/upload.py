@@ -137,6 +137,63 @@ def _delete_qdrant_by_source_file(source_file: str) -> int:
     return len(point_ids)
 
 
+@router.post("/batch")
+async def upload_batch(
+    files: list[UploadFile] = File(..., description="批量上传 PDF/DOCX/MD 文件"),
+    project_id: str = Form(..., description="批次项目 ID"),
+    term: Optional[str] = Form(None, description="春季 / 夏季"),
+):
+    """
+    批量上传同一项目的文档。
+    要求所有文件属于同一个 project_id。
+    支持自动转化为 Markdown 并提取元信息。
+    """
+    results = []
+    minio_client = _get_minio_client()
+    
+    for file in files:
+        document_id = str(uuid.uuid4())
+        content = await file.read()
+        
+        # 1. 备份原文件
+        object_key = _build_object_key(document_id, file.filename)
+        _save_to_minio_with_key(minio_client, object_key, content)
+        
+        # 2. 存入临时文件供解析
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+            
+        try:
+            # ingest_file 会内部调用 parse_document，自动处理 PDF/DOCX 转化为 Markdown
+            # 以及自动提取架构/业务关联元信息
+            res = ingest_file(
+                file_path=tmp_path,
+                project_id=project_id,
+                term=term,
+                document_id=document_id,
+                source_file=object_key
+            )
+            results.append({
+                "filename": file.filename,
+                "status": "ok",
+                "chunks": res.get("chunks_inserted", 0),
+                "document_id": document_id
+            })
+        except Exception as exc:
+            logger.error(f"批量上传解析失败 {file.filename}: {exc}")
+            results.append({
+                "filename": file.filename,
+                "status": "error",
+                "message": str(exc)
+            })
+        finally:
+            if Path(tmp_path).exists():
+                Path(tmp_path).unlink()
+                
+    return {"project_id": project_id, "files": results}
+
+
 @router.post("/upload")
 async def upload_document(
     file: UploadFile = File(..., description="待入库 PDF/DOCX 文件"),

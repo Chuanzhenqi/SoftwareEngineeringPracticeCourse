@@ -25,7 +25,7 @@ class TextChunk:
     chunk_index: int = 0    # 在文档内的顺序编号
 
 
-# ── 标题识别 ─────────────────────────────────────────────────────────────
+#  标题识别
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$")
 _SUMMARY_TITLE_RE = re.compile(
     r"^(?:第?[一二三四五六七八九十百千\d]+[章节部分篇]?\s*)?"
@@ -68,7 +68,7 @@ def _looks_like_summary_boundary(line: str) -> str | None:
     return None
 
 
-# ── 第一层：按 heading 边界切块 ──────────────────────────────────────────
+#  第一层：按 heading 边界切块 
 def _structural_split(full_text: str) -> list[tuple[str, list[str]]]:
     """
     返回 [(section_text, heading_stack), ...]
@@ -104,7 +104,7 @@ def _structural_split(full_text: str) -> list[tuple[str, list[str]]]:
     return result
 
 
-# ── 第二层：滑动窗口语义切分 ─────────────────────────────────────────────
+#  第二层：滑动窗口语义切分
 def _semantic_split(text: str, section_path: str, page_start: int, start_idx: int
                     ) -> list[TextChunk]:
     """在一个结构块内按字符数做滑动窗口切分"""
@@ -177,7 +177,7 @@ def _split_by_summary_boundaries(text: str) -> list[tuple[str, str]]:
     return sections
 
 
-# ── 特殊块检测（表格/接口/编号列表单独成块，不拆分）────────────────────
+#  特殊块检测（表格/接口/编号列表单独成块，不拆分）
 _SPECIAL_PATTERNS = [
     re.compile(r"(\|.+\|.+\n){2,}"),          # Markdown 表格
     re.compile(r"(FR|NFR|IF|TC|SD)-\d+"),      # 编号体系
@@ -189,7 +189,7 @@ def _is_special(text: str) -> bool:
     return any(p.search(text) for p in _SPECIAL_PATTERNS)
 
 
-# ── 公共 API ─────────────────────────────────────────────────────────────
+#  公共 API ─
 def chunk_document(doc: ParsedDocument) -> list[TextChunk]:
     """对一整份 ParsedDocument 做两层分块，返回有序 TextChunk 列表"""
     full_text = doc.full_text

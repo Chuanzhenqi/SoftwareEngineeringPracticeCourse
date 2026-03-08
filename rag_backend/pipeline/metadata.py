@@ -23,7 +23,7 @@ from config import CONFIDENCE_THRESHOLD, RULES_DIR
 from pipeline.chunker import TextChunk
 
 
-# ── 规则文件加载 ──────────────────────────────────────────────────────────
+#  规则文件加载 
 def _load_rules() -> dict:
     rules_path = RULES_DIR / "metadata_rules.yaml"
     with open(rules_path, encoding="utf-8") as f:
@@ -38,7 +38,7 @@ def get_rules() -> dict:
     return _RULES
 
 
-# ── A. 路径 / 文件名规则抽取 ─────────────────────────────────────────────
+#  A. 路径 / 文件名规则抽取 ─
 _YEAR_RE = re.compile(r"(20\d{2})")
 _TERM_ZH = {"春季": ["春季", "spring"], "夏季": ["夏季", "summer", "暑"]}
 
@@ -82,7 +82,7 @@ def _extract_project_id(path_str: str) -> tuple[Optional[str], float]:
     return None, 0.0
 
 
-# ── B. 章节关键词匹配 ────────────────────────────────────────────────────
+#  B. 章节关键词匹配 
 def _match_rule(text: str, rules: list[dict], key: str) -> tuple[Optional[str], float]:
     for rule in rules:
         if re.search(rule["pattern"], text):
@@ -107,12 +107,16 @@ def _extract_status(text: str) -> tuple[Optional[str], float]:
     return None, 0.0
 
 
-# ── C. 编号提取（req_ids / design_ids / test_ids）────────────────────────
+#  C. 编号提取（req_ids / design_ids / test_ids）
 _REQ_RE = re.compile(r"\b(FR|NFR|IF)-\d+\b")
 _DESIGN_RE = re.compile(r"\b(SD|DES)-\d+\b")
 _TEST_RE = re.compile(r"\b(TC|TEST)-\d+\b")
 _IMPL_RE = re.compile(r"\b([A-Z][a-zA-Z0-9]*(?:Controller|Service|Repository|Manager|Handler|API))\b")
 
+
+# 架构设计关键字
+_ARCH_KEYWORDS = ["架构", "设计", "模式", "module", "component", "interface", "protocol", "layer", "分分层", "模块"]
+_BIZ_KEYWORDS = ["业务", "流程", "功能", "需求", "场景", "用户", "用例", "business", "logic"]
 
 def _extract_ids(text: str) -> dict:
     req_ids = list(set(_REQ_RE.findall(text)))
@@ -128,16 +132,26 @@ def _extract_ids(text: str) -> dict:
         for d in design_ids:
             trace_links.append({"from": r, "to": d})
 
+    # 自动提取架构/业务关联关键字，增强后续查询权重
+    text_lc = text.lower()
+    arch_match = [kw for kw in _ARCH_KEYWORDS if kw in text_lc]
+    biz_match = [kw for kw in _BIZ_KEYWORDS if kw in text_lc]
+    
+    keywords = list(set(arch_match + biz_match))
+
     return {
         "req_ids": req_ids,
         "design_ids": design_ids,
         "test_ids": test_ids,
         "impl_refs": impl_refs,
         "trace_links": trace_links,
+        "keywords": keywords,
+        "is_arch": len(arch_match) > 0,
+        "is_biz": len(biz_match) > 0
     }
 
 
-# ── D. 质量评分（启发式）────────────────────────────────────────────────
+#  D. 质量评分（启发式）
 def _heuristic_quality(text: str, chunk_len: int) -> tuple[str, float]:
     """
     high:  含编号/度量/代码块/表格，且长度充足
@@ -157,7 +171,7 @@ def _heuristic_quality(text: str, chunk_len: int) -> tuple[str, float]:
     return "medium", 0.70
 
 
-# ── chunk_id 生成 ─────────────────────────────────────────────────────────
+#  chunk_id 生成
 def _make_chunk_id(year: Optional[int], term: Optional[str], project_id: Optional[str],
                    doc_type: Optional[str], chunk_index: int, text: str) -> str:
     parts = [
@@ -171,7 +185,7 @@ def _make_chunk_id(year: Optional[int], term: Optional[str], project_id: Optiona
     return "-".join(parts)
 
 
-# ── 合并置信度（各字段加权平均）─────────────────────────────────────────
+#  合并置信度（各字段加权平均）
 def _overall_confidence(conf: dict) -> float:
     weights = {
         "year": 0.1, "term": 0.15, "doc_type": 0.25,
@@ -187,7 +201,7 @@ def _overall_confidence(conf: dict) -> float:
     return total / weight_sum if weight_sum else 0.0
 
 
-# ── 公共 API ──────────────────────────────────────────────────────────────
+#  公共 API 
 def generate_metadata(
     chunk: TextChunk,
     file_path: str,

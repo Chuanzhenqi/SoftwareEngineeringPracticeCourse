@@ -189,32 +189,62 @@
     wrap.classList.remove("hidden");
     document.getElementById("results").innerHTML = "";
 
-    const fileList = [...files];
-    for (let i = 0; i < fileList.length; i++) {
-      const file = fileList[i];
-      const progressBase = Math.round((i / fileList.length) * 100);
-      const progressEnd  = Math.round(((i + 1) / fileList.length) * 100);
+    const pid  = document.getElementById("project-id").value.trim();
+    const term = document.getElementById("term").value;
 
-      lbl.textContent = `正在入库 (${i+1}/${fileList.length})：${file.name}`;
-      setProgress(bar, pct, progressBase);
+    // 如果填写了项目 ID，且文件超过 1 个，使用批量上传接口优化性能
+    if (pid && files.length > 1) {
+      lbl.textContent = `正在批量入库 (${files.length} 个文件)...`;
+      setProgress(bar, pct, 30);
 
       const fd = new FormData();
-      fd.append("file", file);
-      const pid  = document.getElementById("project-id").value.trim();
-      const term = document.getElementById("term").value;
-      const year = document.getElementById("year").value.trim();
-      if (pid)  fd.append("project_id", pid);
+      for (const f of files) fd.append("files", f);
+      fd.append("project_id", pid);
       if (term) fd.append("term", term);
-      if (year) fd.append("year", year);
 
       try {
-        const resp = await fetch(`${API_BASE}/api/upload`, { method: "POST", body: fd });
+        const resp = await fetch(`${API_BASE}/api/batch`, { method: "POST", body: fd });
         const data = await resp.json();
-        setProgress(bar, pct, progressEnd);
-        appendResult(file.name, resp.ok, data);
+        setProgress(bar, pct, 100);
+        
+        if (resp.ok && data.files) {
+          data.files.forEach(f => {
+            appendBatchResult(f.filename, f.status === "ok", f);
+          });
+        } else {
+          appendBatchResult("批量任务", false, { detail: data.detail || "未知错误" });
+        }
       } catch (err) {
-        setProgress(bar, pct, progressEnd);
-        appendResult(file.name, false, { detail: String(err) });
+        setProgress(bar, pct, 100);
+        appendBatchResult("网络错误", false, { detail: String(err) });
+      }
+    } else {
+      // 回退到单文件循环上传（支持自动推断项目ID）
+      const fileList = [...files];
+      for (let i = 0; i < fileList.length; i++) {
+        const file = fileList[i];
+        const progressBase = Math.round((i / fileList.length) * 100);
+        const progressEnd  = Math.round(((i + 1) / fileList.length) * 100);
+
+        lbl.textContent = `正在入库 (${i+1}/${fileList.length})：${file.name}`;
+        setProgress(bar, pct, progressBase);
+
+        const fd = new FormData();
+        fd.append("file", file);
+        if (pid)  fd.append("project_id", pid);
+        if (term) fd.append("term", term);
+        const year = document.getElementById("year").value.trim();
+        if (year) fd.append("year", year);
+
+        try {
+          const resp = await fetch(`${API_BASE}/api/upload`, { method: "POST", body: fd });
+          const data = await resp.json();
+          setProgress(bar, pct, progressEnd);
+          appendResult(file.name, resp.ok, data);
+        } catch (err) {
+          setProgress(bar, pct, progressEnd);
+          appendResult(file.name, false, { detail: String(err) });
+        }
       }
     }
 
@@ -226,6 +256,37 @@
   function setProgress(bar, pct, val) {
     bar.style.width = val + "%";
     pct.textContent = val + "%";
+  }
+
+  function appendBatchResult(filename, ok, data) {
+    const container = document.getElementById("results");
+    const div = document.createElement("div");
+    div.className = `rounded-xl p-4 shadow-sm text-sm space-y-2 ${ok ? "bg-green-50 border border-green-200" : "bg-red-50 border border-red-200"}`;
+
+    const report = data.report || {};
+    const meta = data.metadata || {};
+    div.innerHTML = `
+      <div class="flex items-start gap-2">
+        <span class="${ok ? "text-green-600" : "text-red-500"} mt-0.5">
+          ${ok ? "✅" : "❌"}
+        </span>
+        <div class="flex-1 min-w-0">
+          <p class="font-medium text-slate-800 truncate">${escHtml(filename)}</p>
+          ${ok ? `
+            <div class="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-slate-600">
+              <span class="text-xs text-slate-400 col-span-2 italic">识别: ${meta.p_id || '未知项目'} | ${meta.is_arch ? '🏰 架构' : ''} ${meta.is_biz ? '💼 业务' : ''}</span>
+              <span>入库 Chunks</span>
+              <span class="font-semibold text-indigo-600">${report.chunks_ingested ?? "—"}</span>
+              <span>MinIO 备份</span>
+              <span class="${report.minio_object ? "text-green-600" : "text-slate-400"}">
+                ${report.minio_object ? "✓" : "未连接"}
+              </span>
+            </div>
+          ` : `<p class="text-red-600 mt-1">${escHtml(data.detail || data.error || '上传失败')}</p>`}
+        </div>
+      </div>
+    `;
+    container.appendChild(div);
   }
 
   function appendResult(filename, ok, data) {
