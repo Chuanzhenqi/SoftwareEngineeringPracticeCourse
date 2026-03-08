@@ -1,8 +1,3 @@
-"""
-main.py
-FastAPI 入口
-"""
-
 import sys
 from pathlib import Path
 
