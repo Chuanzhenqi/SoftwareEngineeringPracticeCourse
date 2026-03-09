@@ -104,29 +104,92 @@ _TEMPLATE_SECTIONS: dict[str, list[str]] = {
         "6 风险管理",
         "7 迭代复盘",
     ],
+    "项目总结": [
+        "1 项目背景与目标",
+        "2 交付成果总览",
+        "3 技术方案与实施过程回顾",
+        "4 质量与测试结果",
+        "5 团队协作与过程管理复盘",
+        "6 风险问题与改进措施",
+        "7 课程收获与后续计划",
+    ],
 }
+
+_DOC_TYPE_CANONICAL: dict[str, str] = {
+    "软件需求规格说明书": "需求",
+    "需求规格说明书": "需求",
+    "需求": "需求",
+    "软件概要设计说明书": "概要设计",
+    "概要设计": "概要设计",
+    "软件详细设计说明书": "详细设计",
+    "详细设计": "详细设计",
+    "软件开发计划书": "开发计划",
+    "开发计划": "开发计划",
+    "项目管理文档": "项目管理",
+    "项目管理": "项目管理",
+    "测试报告": "测试报告",
+    "用户手册": "用户手册",
+    "用户使用说明书": "用户手册",
+    "项目总结报告": "项目总结",
+    "项目总结": "项目总结",
+    "总结报告": "项目总结",
+    "人员分工": "人员分工",
+}
+
+_DOC_TYPE_TEMPLATE_KEY: dict[str, str] = {
+    "软件需求规格说明书": "软件需求规格说明书",
+    "需求": "软件需求规格说明书",
+    "软件概要设计说明书": "软件概要设计说明书",
+    "概要设计": "软件概要设计说明书",
+    "软件详细设计说明书": "软件详细设计说明书",
+    "详细设计": "软件详细设计说明书",
+    "软件开发计划书": "软件开发计划书",
+    "开发计划": "软件开发计划书",
+    "测试报告": "测试报告",
+    "迭代需求文档": "迭代需求文档",
+    "项目管理文档": "项目管理文档",
+    "项目管理": "项目管理文档",
+    "项目总结": "项目总结",
+    "项目总结报告": "项目总结",
+    "用户手册": "用户手册",
+    "用户使用说明书": "用户手册",
+}
+
+
+def _normalize_doc_type_for_search(doc_type: str | None) -> str | None:
+    if not doc_type:
+        return None
+    s = doc_type.strip()
+    if not s:
+        return None
+    return _DOC_TYPE_CANONICAL.get(s, s)
+
+
+def _normalize_doc_type_for_template(doc_type: str) -> str:
+    s = (doc_type or "").strip()
+    return _DOC_TYPE_TEMPLATE_KEY.get(s, s)
 
 # 阶段 → 推荐 Skills 映射 
 _PHASE_SKILLS: dict[str, list[dict]] = {
     "requirement": [
-        {"skill": "se-requirements-doc-assistant", "trigger": "生成需求规格说明书章节内容"},
-        {"skill": "ambiguity-detector", "trigger": "检测需求文本中的歧义表述"},
+        {"skill": "se-requirements-doc-assistant", "trigger": "生成需求规格说明书章节内容", "description": "用于结构化产出需求分析文档与验收标准"},
+        {"skill": "ambiguity-detector", "trigger": "检测需求文本中的歧义表述", "description": "识别需求中的模糊词、范围不清与缺失约束"},
     ],
     "design": [
-        {"skill": "se-architecture-doc-assistant", "trigger": "生成概要设计/详细设计章节"},
-        {"skill": "api-design-assistant", "trigger": "设计接口规范（OpenAPI格式）"},
+        {"skill": "se-architecture-doc-assistant", "trigger": "生成概要设计/详细设计章节", "description": "用于架构、模块、接口与数据结构设计文档输出"},
+        {"skill": "api-design-assistant", "trigger": "设计接口规范（OpenAPI格式）", "description": "用于生成标准化接口定义与契约说明"},
     ],
     "implementation": [
-        {"skill": "se-implementation-doc-assistant", "trigger": "生成实现阶段文档"},
-        {"skill": "se-project-management-doc-assistant", "trigger": "生成开发计划/迭代记录"},
-        {"skill": "code-change-summarizer", "trigger": "汇总 git 提交生成开发说明"},
+        {"skill": "se-implementation-doc-assistant", "trigger": "生成实现阶段文档", "description": "用于整理实现说明、迭代记录与完成度证明"},
+        {"skill": "se-project-management-doc-assistant", "trigger": "生成开发计划/迭代记录", "description": "用于生成项目管理材料与过程追踪文档"},
+        {"skill": "code-change-summarizer", "trigger": "汇总 git 提交生成开发说明", "description": "用于从提交历史提炼阶段实现总结"},
     ],
     "testing_deployment": [
-        {"skill": "se-testing-deployment-doc-assistant", "trigger": "生成测试报告/用户手册/部署说明"},
+        {"skill": "se-testing-deployment-doc-assistant", "trigger": "生成测试报告/用户手册/部署说明", "description": "用于测试与部署阶段的文档化交付"},
     ],
     "all": [
-        {"skill": "se-course-doc-orchestrator", "trigger": "统筹整个课程文档阶段，不确定从哪份写时优先使用"},
-        {"skill": "explain-code", "trigger": "需要在文档中解释代码实现逻辑"},
+        {"skill": "se-course-doc-orchestrator", "trigger": "统筹整个课程文档阶段，不确定从哪份写时优先使用", "description": "用于阶段编排与文档产出流程串联"},
+        {"skill": "explain-code", "trigger": "需要在文档中解释代码实现逻辑", "description": "用于将代码行为转换为可读的实现说明"},
     ],
 }
 
@@ -161,11 +224,13 @@ def search_course_docs(
         - score: 综合得分（语义 0.6 + 标签匹配 0.25 + 连续性 0.15）
         - why: 命中原因（语义分 / 标签命中率 / 连续性类型）
     """
+    normalized_doc_type = _normalize_doc_type_for_search(doc_type)
+
     results = search(
         query=query,
         phase=phase,
         term=term,
-        doc_type=doc_type,
+        doc_type=normalized_doc_type,
         quality_level=quality_level,
         artifact_type=artifact_type,
         use_reranker=use_reranker,
@@ -216,7 +281,9 @@ def get_phase_examples(
         "概要设计": "架构设计 模块划分 接口设计",
         "详细设计": "类设计 数据结构 算法流程",
         "测试报告": "测试用例 测试结果 缺陷记录",
-        "软件开发计划书": "进度计划 里程碑 人员分工",
+        "开发计划": "进度计划 里程碑 人员分工",
+        "项目管理": "Sprint Backlog 迭代计划 燃尽图 复盘",
+        "项目总结": "项目总结 复盘 技术选型 过程改进",
     }
     _PHASE_DEFAULT_QUERY = {
         "requirement": "功能需求 非功能需求 用例",
@@ -225,17 +292,19 @@ def get_phase_examples(
         "testing_deployment": "测试报告 测试用例 部署说明",
     }
 
+    normalized_doc_type = _normalize_doc_type_for_search(doc_type)
+
     if topic_hint:
         query = f"{topic_hint}"
-    elif doc_type and doc_type in _DOC_TYPE_QUERY:
-        query = _DOC_TYPE_QUERY[doc_type]
+    elif normalized_doc_type and normalized_doc_type in _DOC_TYPE_QUERY:
+        query = _DOC_TYPE_QUERY[normalized_doc_type]
     else:
         query = _PHASE_DEFAULT_QUERY.get(phase, phase)
 
     results = search(
         query=query,
         phase=phase,
-        doc_type=doc_type,
+        doc_type=normalized_doc_type,
         quality_level=["high"],
         use_reranker=False,
     )
@@ -317,7 +386,7 @@ def get_template_sections(doc_type: str) -> dict:
     Args:
         doc_type: 文档类型，支持：
             软件需求规格说明书 / 软件概要设计说明书 / 软件详细设计说明书 /
-            软件开发计划书 / 测试报告 / 迭代需求文档 / 项目管理文档
+            软件开发计划书 / 测试报告 / 迭代需求文档 / 项目管理文档 / 项目总结
 
     Returns:
         {doc_type, sections, template_path_hint}
@@ -331,10 +400,14 @@ def get_template_sections(doc_type: str) -> dict:
         "软件开发计划书": "模版库-供claudeCode调用/提交文件模版/春季/软件开发计划书.md",
         "测试报告": "模版库-供claudeCode调用/提交文件模版/春季/测试报告.md",
         "迭代需求文档": None,
-        "项目管理文档": None,
+        "项目管理文档": "模版库-供claudeCode调用/提交文件模版/夏季/项目管理文档.md",
+        "项目总结": "模版库-供claudeCode调用/提交文件模版/夏季/项目总结.md",
+        "用户手册": "模版库-供claudeCode调用/提交文件模版/春季/用户手册模版.md",
     }
 
-    sections = _TEMPLATE_SECTIONS.get(doc_type)
+    resolved_doc_type = _normalize_doc_type_for_template(doc_type)
+
+    sections = _TEMPLATE_SECTIONS.get(resolved_doc_type)
     if sections is None:
         available = list(_TEMPLATE_SECTIONS.keys())
         return {
@@ -343,9 +416,9 @@ def get_template_sections(doc_type: str) -> dict:
         }
 
     return {
-        "doc_type": doc_type,
+        "doc_type": resolved_doc_type,
         "sections": sections,
-        "template_path_hint": _TEMPLATE_PATH_HINT.get(doc_type),
+        "template_path_hint": _TEMPLATE_PATH_HINT.get(resolved_doc_type),
         "usage_note": (
             "请按 sections 列表逐章生成内容，"
             "对每个章节可调用 search_by_section 检索往年同章节的高质量写法"
@@ -372,18 +445,28 @@ def suggest_skills(
     """
     _DOC_TYPE_TO_PHASE = {
         "软件需求规格说明书": "requirement",
+        "需求": "requirement",
         "迭代需求文档": "requirement",
         "软件概要设计说明书": "design",
+        "概要设计": "design",
         "软件详细设计说明书": "design",
+        "详细设计": "design",
         "软件开发计划书": "implementation",
+        "开发计划": "implementation",
         "项目管理文档": "implementation",
+        "项目管理": "implementation",
         "测试报告": "testing_deployment",
         "用户手册": "testing_deployment",
+        "项目总结": "testing_deployment",
+        "项目总结报告": "testing_deployment",
     }
 
     # doc_type 覆盖 phase
     resolved_phase = phase
-    if doc_type and doc_type in _DOC_TYPE_TO_PHASE:
+    normalized_doc_type = _normalize_doc_type_for_template(doc_type) if doc_type else None
+    if normalized_doc_type and normalized_doc_type in _DOC_TYPE_TO_PHASE:
+        resolved_phase = _DOC_TYPE_TO_PHASE[normalized_doc_type]
+    elif doc_type and doc_type in _DOC_TYPE_TO_PHASE:
         resolved_phase = _DOC_TYPE_TO_PHASE[doc_type]
 
     result = list(_PHASE_SKILLS.get("all", []))  # 通用 skills 始终包含
@@ -419,10 +502,12 @@ def search_by_section(
     if quality_level is None:
         quality_level = ["high"]
 
+    normalized_doc_type = _normalize_doc_type_for_search(doc_type)
+
     results = search(
         query=section_path,
         phase=phase,
-        doc_type=doc_type,
+        doc_type=normalized_doc_type,
         quality_level=quality_level,
         use_reranker=True,
     )

@@ -108,9 +108,10 @@ def _extract_status(text: str) -> tuple[Optional[str], float]:
 
 
 #  C. 编号提取（req_ids / design_ids / test_ids）
-_REQ_RE = re.compile(r"\b(FR|NFR|IF)-\d+\b")
-_DESIGN_RE = re.compile(r"\b(SD|DES)-\d+\b")
-_TEST_RE = re.compile(r"\b(TC|TEST)-\d+\b")
+# 使用完整匹配，避免 findall 在捕获组场景下只返回前缀（如 FR / SD / TC）。
+_REQ_RE = re.compile(r"\b(?:FR|NFR|IF)-\d+\b")
+_DESIGN_RE = re.compile(r"\b(?:SD|DES)-\d+\b")
+_TEST_RE = re.compile(r"\b(?:TC|TEST)-\d+\b")
 _IMPL_RE = re.compile(r"\b([A-Z][a-zA-Z0-9]*(?:Controller|Service|Repository|Manager|Handler|API))\b")
 
 
@@ -119,9 +120,9 @@ _ARCH_KEYWORDS = ["架构", "设计", "模式", "module", "component", "interfac
 _BIZ_KEYWORDS = ["业务", "流程", "功能", "需求", "场景", "用户", "用例", "business", "logic"]
 
 def _extract_ids(text: str) -> dict:
-    req_ids = list(set(_REQ_RE.findall(text)))
-    design_ids = list(set(_DESIGN_RE.findall(text)))
-    test_ids = list(set(_TEST_RE.findall(text)))
+    req_ids = list({m.group(0) for m in _REQ_RE.finditer(text)})
+    design_ids = list({m.group(0) for m in _DESIGN_RE.finditer(text)})
+    test_ids = list({m.group(0) for m in _TEST_RE.finditer(text)})
     impl_refs = list(set(m for m in _IMPL_RE.findall(text) if len(m) > 4))
 
     # 简单 trace_links：同块内同时出现 req + test/design 建立边

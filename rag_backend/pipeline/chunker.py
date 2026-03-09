@@ -1,7 +1,7 @@
 """
 pipeline/chunker.py
 两层分块策略（见 rag方案.md §3）：
-    第一层：按 Markdown heading + 小结边界切块
+    第一层：按 Markdown 一级/二级标题切块；当段落过长时按三级标题补切
     第二层：在结构块内做滑动窗口语义切分（按字符数）
 
 说明：
@@ -27,6 +27,9 @@ class TextChunk:
 
 #  标题识别
 _HEADING_RE = re.compile(r"^(#{1,6})\s+(.+)$")
+_STRUCTURAL_SPLIT_MAX_HEADING_LEVEL = 2
+# 二级段落累计过长时，允许在三级标题处补切，提升语义完整性与可读性平衡。
+_H3_SPLIT_TRIGGER_CHARS = CHUNK_MAX_CHARS * 2
 _SUMMARY_TITLE_RE = re.compile(
     r"^(?:第?[一二三四五六七八九十百千\d]+[章节部分篇]?\s*)?"
     r"(?:本章|本节|模块|阶段|单元)?"
@@ -72,7 +75,8 @@ def _looks_like_summary_boundary(line: str) -> str | None:
 def _structural_split(full_text: str) -> list[tuple[str, list[str]]]:
     """
     返回 [(section_text, heading_stack), ...]
-    heading_stack 是当前章节的祖先标题列表
+    heading_stack 是当前章节的祖先标题列表。
+    默认仅按一级/二级标题切分；若当前段落过长，遇到三级标题触发补切。
     """
     lines = full_text.splitlines()
     sections: list[tuple[list[str], list[str]]] = []  # (lines, heading_stack)
@@ -89,10 +93,20 @@ def _structural_split(full_text: str) -> list[tuple[str, list[str]]]:
         h = _parse_heading(line)
         if h:
             level, title = h
-            push_section()
-            # 更新标题栈：弹出同级或更深的标题
-            heading_stack = [(lvl, t) for lvl, t in heading_stack if lvl < level]
-            heading_stack.append((level, title))
+            # 仅按一级/二级标题进行结构切分，三级及以下标题保留在段内，
+            # 以提升单块语义完整性（避免被切得过碎）。
+            if level <= _STRUCTURAL_SPLIT_MAX_HEADING_LEVEL:
+                push_section()
+                # 更新标题栈：弹出同级或更深的标题
+                heading_stack = [(lvl, t) for lvl, t in heading_stack if lvl < level]
+                heading_stack.append((level, title))
+            elif level == 3:
+                current_len = len("\n".join(current).strip())
+                if current_len >= _H3_SPLIT_TRIGGER_CHARS:
+                    push_section()
+                    # 触发补切时，把三级标题纳入路径，便于后续定位。
+                    heading_stack = [(lvl, t) for lvl, t in heading_stack if lvl < level]
+                    heading_stack.append((level, title))
         current.append(line)
 
     push_section()

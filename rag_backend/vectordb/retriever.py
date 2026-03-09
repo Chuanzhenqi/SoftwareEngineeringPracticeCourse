@@ -349,7 +349,10 @@ def _composite_score(
     for k, v in required_meta.items():
         if v is not None:
             meta_total += 1
-            if payload.get(k) == v:
+            if isinstance(v, list):
+                if payload.get(k) in v:
+                    meta_hits += 1
+            elif payload.get(k) == v:
                 meta_hits += 1
     meta_match = meta_hits / meta_total if meta_total else 0.5
 
@@ -388,30 +391,43 @@ def _continuity_expand(
     existing_ids = {r["id"] for r in results}
     extra = []
 
+    def target_fields(linked_id: str) -> list[str]:
+        lid = (linked_id or "").upper()
+        if lid.startswith(("FR-", "NFR-", "IF-")):
+            return ["req_ids"]
+        if lid.startswith(("SD-", "DES-")):
+            return ["design_ids"]
+        if lid.startswith(("TC-", "TEST-")):
+            return ["test_ids"]
+        return ["req_ids", "design_ids", "test_ids"]
+
     for r in results[:TOPK_RERANK // 2]:  # 只对 top 一半扩展
         links = r["payload"].get("trace_links", [])
         for link in links[:expand_n]:
             linked_id_pat = link.get("to", "")
             if not linked_id_pat:
                 continue
-            # 用 section_path 关键词做 payload 过滤召回
+            fields = target_fields(linked_id_pat)
             try:
-                hits = client.scroll(
-                    collection_name=QDRANT_COLLECTION,
-                    scroll_filter=Filter(
-                        must=[FieldCondition(
-                            key="req_ids",
-                            match=MatchAny(any=[linked_id_pat]),
-                        )]
-                    ),
-                    limit=2,
-                    with_payload=True,
-                )[0]
-                for h in hits:
-                    hid = str(h.id)
-                    if hid not in existing_ids:
-                        extra.append({"id": hid, "score": 0.0, "payload": h.payload})
-                        existing_ids.add(hid)
+                for field in fields:
+                    hits = client.scroll(
+                        collection_name=QDRANT_COLLECTION,
+                        scroll_filter=Filter(
+                            must=[FieldCondition(
+                                key=field,
+                                match=MatchAny(any=[linked_id_pat]),
+                            )]
+                        ),
+                        limit=2,
+                        with_payload=True,
+                    )[0]
+                    for h in hits:
+                        hid = str(h.id)
+                        if hid not in existing_ids:
+                            extra.append({"id": hid, "score": 0.0, "payload": h.payload})
+                            existing_ids.add(hid)
+                    if len(extra) >= expand_n:
+                        break
             except Exception as exc:
                 logger.warning(
                     f"连续性扩展查询失败，跳过该 link（to={linked_id_pat}）："
@@ -455,7 +471,7 @@ def search(
     )
     required_meta = {
         "term": term, "phase": phase, "doc_type": doc_type,
-        "quality_level": quality_level[0] if quality_level else None,
+        "quality_level": quality_level,
     }
 
     # 3. 混合召回（严格过滤结果过少时自动放宽）
@@ -555,12 +571,8 @@ def search(
             "why_hit": why,
         })
 
-    # 按阶段顺序排（需求→设计→实现→测试部署），相同阶段按评分降序
-    phase_order = {"requirement": 0, "design": 1, "implementation": 2, "testing_deployment": 3}
-    output.sort(key=lambda x: (
-        phase_order.get(x["metadata"].get("phase", ""), 9),
-        -x["composite_score"],
-    ))
+    # 默认按综合评分降序，确保结果相关性优先。
+    output.sort(key=lambda x: x["composite_score"], reverse=True)
     logger.info(f"检索完成：返回 {len(output)} 条")
 
     return output
